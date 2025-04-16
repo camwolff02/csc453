@@ -126,9 +126,8 @@ void execute_command(char **args) {
 	 * 2. In the child, reset signal handling and execute the command
 	 * 3. In the parent, wait for the child and handle its exit status
 	 * 4. TODO For pipes, create two child processes connected by a pipe
-	 * 5. TODO For redirection, use open() and dup2() to redirect stdout
+	 * 5. For redirection, use open() and dup2() to redirect stdout
 	 */
-
 	int status;
 	int append = 0;
 	int redirect_idx = 0;  
@@ -163,7 +162,7 @@ void execute_command(char **args) {
 				printf("ERROR: Pipe used with no output program specified\n");
 				return;
 			} else {
-				// if we're here, we know it's safe to pipe the two programs
+				// if we're here, we know it's safe to pipe the two processes
 				pipe_idxs[pipe_idx++] = idx;		
 
 				// Insert new end to args
@@ -173,17 +172,52 @@ void execute_command(char **args) {
 		}
 	}
 
-	// Fork a child process
+	// check for pipes
+	int fd_in = 0;
+	int exec_idx = 0;
+	int next_exec_idx = 0;
+
+	for (int i = 0; pipe_idxs[i] != 0; i++) {
+		// create a pipe to link the 2 commands
+		int fds[2];
+		pipe(fds);
+
+		// fork off a child for the writing process
+		child_running = fork();
+
+		if (!child_running) {  // if we are the child
+			close(fds[0]);  // close pipe read end
+			dup2(fds[1], STDOUT_FILENO);  // attach write end 
+
+			if (fd_in) {
+				dup2(fd_in, STDIN_FILENO);  // attach read end		
+			}
+			
+			// only grab the args associated with this executable
+			execvp(args[exec_idx], args + exec_idx);
+			exit(EXIT_FAILURE);
+		} else {  // if we are the parent
+
+			exec_idx = next_exec_idx;
+			next_exec_idx = pipe_idxs[i] + 1;
+
+			close(fds[1]);  // close write end
+			if (fd_in) {
+				close(fd_in);  // close old read end
+			}
+			fd_in = fds[0];  // save new read end
+			pipe_idxs[i] = child_running;  // save the child pid
+		}
+	}
+
+	// handle final executable
 	child_running = fork();
 
-	if (child_running) {  // parent
-		// Wait for the child and handle its exit status
-		waitpid(child_running, &status, 0);
-		child_running = 0;
-		// TODO handle exit status
-	} else {  // child
-		// Reset signal handling and execute the command
-		signal(SIGINT, SIG_DFL); 
+	if (!child_running) {  // child
+		// set up pipe if necessary
+		if (fd_in) {
+			dup2(fd_in, STDIN_FILENO);  // attach read end		
+		}
 
 		// set up redirect if necessary
 		if (redirect_idx) {
@@ -196,8 +230,21 @@ void execute_command(char **args) {
 			args[redirect_idx] = NULL;
 		}
 
-		execvp(args[0], args);  
+		// Reset signal handling and execute the command
+		signal(SIGINT, SIG_DFL); 
+		execvp(args[next_exec_idx], args + next_exec_idx);
 		exit(EXIT_FAILURE);
+	} else {  // parent
+		if (fd_in) {
+			close(fd_in);
+		}
+
+		// Wait for all children and handle exit statuses
+		// TODO handle exit status
+		for (int i = 0; pipe_idxs[i] != 0; i++) {
+			waitpid(pipe_idxs[i], &status, 0);
+		}
+		waitpid(child_running, &status, 0);
 	}
 }
  
