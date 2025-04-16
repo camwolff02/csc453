@@ -1,13 +1,17 @@
 CC = gcc
 
-CFLAGS = -std=c99 -Wall -Wextra -pedantic -O2
+CFLAGS = -std=c99 -Wall -Wextra -pedantic -O2 -D_XOPEN_SOURCE=700
 
-TARGETS = memory-consumer
+TARGETS = slosh
 
 all: $(TARGETS)
 
-memory-consumer: memory-consumer.c
+slosh: slosh.c
 	$(CC) $(CFLAGS) -o $@ $<
+
+debug: slosh.c
+	$(CC) $(CFLAGS) -g -o $@ $<
+
 
 clean:
 	rm -f $(TARGETS)
