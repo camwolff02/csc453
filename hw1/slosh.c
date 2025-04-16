@@ -129,8 +129,51 @@ void execute_command(char **args) {
 	 * 5. TODO For redirection, use open() and dup2() to redirect stdout
 	 */
 
-	// Fork a child process
 	int status;
+	int append = 0;
+	int redirect_idx = 0;  
+	int pipe_idxs[MAX_INPUT_SIZE / 2];
+
+	// First, check for special conditions and valid commands
+	for (int idx = 0, pipe_idx = 0; args[idx] != NULL; idx++) {
+		if (args[idx][0] == '>') {
+			if (idx == 0) {
+				printf("ERROR: Redirect used with no program specified\n");
+			} else if (args[idx+1] == NULL) {
+				printf("ERROR: Redirect used with no file specified\n");
+				return;
+			} else if (!access(args[idx+1], F_OK) && access(args[idx+1], W_OK)) {
+				// If the file exists and we can't write to it, we can't redirect 
+				printf("ERROR: Cannot write to specified file\n");
+				return;
+			} else {
+				// if we're here, we know it's safe to write to the file
+				redirect_idx = idx;
+				append = args[idx][1] == '>';
+
+				// Insert new end to args
+				free(args[idx]);
+				args[idx] = NULL;
+				break;
+			}
+		} else if (args[idx][0] == '|') {
+			if (idx == 0) {
+				printf("ERROR: Pipe used with no input program specified\n");
+			} else if (args[idx+1] == NULL || args[idx+1][0] == '|' || args[idx+1][0] == '>') {
+				printf("ERROR: Pipe used with no output program specified\n");
+				return;
+			} else {
+				// if we're here, we know it's safe to pipe the two programs
+				pipe_idxs[pipe_idx++] = idx;		
+
+				// Insert new end to args
+				free(args[idx]);
+				args[idx] = NULL;
+			}
+		}
+	}
+
+	// Fork a child process
 	child_running = fork();
 
 	if (child_running) {  // parent
@@ -141,10 +184,20 @@ void execute_command(char **args) {
 	} else {  // child
 		// Reset signal handling and execute the command
 		signal(SIGINT, SIG_DFL); 
+
+		// set up redirect if necessary
+		if (redirect_idx) {
+			const char *fname = args[redirect_idx+1];
+			// apply bitmask to check for append
+			int fd = open(fname, 
+				O_WRONLY|O_CREAT|(O_APPEND & (~0*append)),  
+				S_IRUSR|S_IWUSR);
+			dup2(fd, STDOUT_FILENO);
+			args[redirect_idx] = NULL;
+		}
+
 		execvp(args[0], args);  
 		exit(EXIT_FAILURE);
-		// TODO ERROR: if I do "ls" then "ls -a", ls doesn't work anymore
-		// pwd also adds weird other part
 	}
 }
  
