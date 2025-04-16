@@ -20,6 +20,7 @@
 #include <pwd.h>
  
 /* Define PATH_MAX if it's not available */
+
 #ifndef PATH_MAX
 #define PATH_MAX 4096
 #endif
@@ -29,6 +30,7 @@
 
 /* Global variable for signal handling */
 volatile sig_atomic_t child_running = 0;
+volatile sig_atomic_t sigint_handled = 0;
 
 /* Forward declarations */
 void display_prompt(void);
@@ -36,13 +38,14 @@ void display_prompt(void);
 /**
 * Signal handler for SIGINT (Ctrl+C)
 * 
-* TODO: Implement the signal handler to:
+* Implement the signal handler to:
 * 1. Print a newline
 * 2. If no child is running, display a prompt
 * 3. Make sure the shell doesn't exit when SIGINT is received
 */
 void sigint_handler() {
-	/* TODO NOTE: we shouldn't use printf in a signal handler, we need to set a flag */
+	sigint_handled = 1;
+	/* NOTE: we shouldn't use printf in a signal handler, we need to set a flag */
 	printf("\n");
 
 	if (!child_running) {
@@ -51,7 +54,6 @@ void sigint_handler() {
 	} else {
 		kill(child_running, SIGALRM);
 	}
-
  }
  
 /**
@@ -105,15 +107,15 @@ int parse_input(char *input, char **args) {
 	 		// If there's not a space, add this character to the current buffer
 			buf[buf_idx++] = input[input_idx];
 		}
-
 	}
+
 	return arg_idx;
 }
  
 /**
 * Execute the given command with its arguments
 * 
-* TODO: Implement command execution with support for:
+* Implement command execution with support for:
 * 1. Basic command execution
 * 2. Pipes (|)
 * 3. Output redirection (> and >>)
@@ -125,7 +127,7 @@ void execute_command(char **args) {
 	 * 1. Fork a child process
 	 * 2. In the child, reset signal handling and execute the command
 	 * 3. In the parent, wait for the child and handle its exit status
-	 * 4. TODO For pipes, create two child processes connected by a pipe
+	 * 4. For pipes, create two child processes connected by a pipe
 	 * 5. For redirection, use open() and dup2() to redirect stdout
 	 */
 	int status;
@@ -243,15 +245,28 @@ void execute_command(char **args) {
 		// TODO handle exit status
 		for (int i = 0; pipe_idxs[i] != 0; i++) {
 			waitpid(pipe_idxs[i], &status, 0);
+			pipe_idxs[i] = 0;
+			if (!WIFEXITED(status)) {
+				printf("Child exited with status: %d\n", WEXITSTATUS(status));
+			}
+			if (!WIFSIGNALED(status)) {
+				printf("Child terminated with signal: %d\n", WTERMSIG(status));
+			}
 		}
-		waitpid(child_running, &status, 0);
+		waitpid(child_running, &status, 0);			
+		if (WIFEXITED(status) && WEXITSTATUS(status)) {
+			printf("Child exited with status: %d\n", WEXITSTATUS(status));
+		}
+		if (WIFSIGNALED(status)) {
+			printf("Child terminated with signal: %d\n", WTERMSIG(status));
+		}
 	}
 }
  
 /**
 * Check for and handle built-in commands
 * 
-* TODO: Implement support for built-in commands:
+* Implement support for built-in commands:
 * - exit: Exit the shell
 * - cd: Change directory
 * 
@@ -290,7 +305,7 @@ int main(void) {
     int builtin_result;
 	struct sigaction sigint_action;
     
-    /* Set up signal handling for SIGINT (Ctrl+C) TODO check */
+    /* Set up signal handling for SIGINT (Ctrl+C) */
 	sigint_action.sa_handler = sigint_handler;
  	sigint_action.sa_flags = SA_RESTART;
  	sigemptyset(&sigint_action.sa_mask);
@@ -308,6 +323,7 @@ int main(void) {
         /* Read input and handle signal interruption */
         if (fgets(input, MAX_INPUT_SIZE, stdin) == NULL) {
             /* TODO: Handle EOF and signal interruption */
+			fflush(stdin);
             break;
         }
          
@@ -315,8 +331,7 @@ int main(void) {
         n_args = parse_input(input, args);
          
         /* Handle empty command */
-        if (args[0] == NULL) {
-			printf("No command passed\n");
+        if (args[0] == NULL || args[0][0] == '\0') {
             continue;
         }
          
