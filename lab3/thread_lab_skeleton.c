@@ -85,7 +85,7 @@ void set_thread_affinity(int core_id) {
  
 /* Kernel thread worker function with mutex synchronization */
 void *kernel_thread_worker(void *arg) {
-	/* TODO: Implement thread worker function
+	/* Implement thread worker function
      * 1. Cast arg to KernelThreadArgs pointer and extract work assignment
      * 2. Initialize a local sum variable
      * 3. Set thread affinity based on thread_id
@@ -244,42 +244,66 @@ void *kernel_thread_worker(void *arg) {
      printf("Initialization complete.\n");
      printf("----------------------------------------\n");
 
-     /* TODO: Initialize mutex 
+     /* Initialize mutex 
       * Initialize the mutex here using pthread_mutex_init
       */
+	 // pthread_mutex_init(&array_mutex, NULL);
+
      /* Kernel thread benchmark */
      printf("Running Kernel Thread Benchmark (%d threads) with mutex synchronization...\n", NUM_WORKERS);
      long long start_time = get_time_us();
  
-     /* TODO: Implement thread creation and execution
+     /* Implement thread creation and execution
       * 1. Allocate memory for thread handles, arguments, and results
       * 2. Create threads using pthread_create and provide them with work assignments
       * 3. Wait for all threads to complete using pthread_join
       * 4. Calculate the total sum from all threads
       */
-	 pthread_t treads[NUM_WORKERS];
+	 // 1
+	 pthread_t threads[NUM_WORKERS];
 	 KernelThreadArgs args[NUM_WORKERS];
  	 kernel_thread_sums = (long long *)malloc(sizeof(long long) * NUM_WORKERS);
 	 int stride = ARRAY_SIZE / NUM_WORKERS;
 	 int remainder = ARRAY_SIZE % NUM_WORKERS;
-	 int num_cores = sysconf(_SC_NPROCESSORS_ONLN); 
-	 int arr_idx = 0;
+	 size_t arr_idx = 0;
+	 int num_cores = sysconf(_SC_NPROCESSORS_ONLN);
 
+	 // 2
 	 for (int i = 0; i < NUM_WORKERS; i++) {
-		 // assign work and start thread
-		 // arg[i] = {thread_id, start_index, end_index};
-		 int end_idx = arr_idx+stride-1;
-		 if (i == 0) {
-			 end_idx += remainder ;
+		 // assign work (mutually exclusive array slice) to thread
+		 size_t end_idx = arr_idx + stride - 1;
+		 if (remainder) {
+			 end_idx++;  
+			 remainder--;
 		 }
-		 arg[i] = {i, arr_idx, end_idx};
+		 args[i] = {i, arr_idx, end_idx};
 		 arr_idx += end_idx + 1;
-		 pthread_setaffinity_np(threads[0], ?, ?);
+
+		 // set cpu affinity so threads always run on the same CPU
+		 cpu_set_t cpuset;
+		 CPU_ZERO(&cpuset);
+		 CPU_SET(i % num_cores, &cpuset);
+		 int s = pthread_setaffinity_np(threads[0], sizeof(cpuset), &cpuset);
+		 if (s != 0) {
+			 errc(EXIT_FAILURE, s, "pthread_setaffinity_np");
+		 }
+
+		 // start thread
 	 	 pthread_create(&threads[0], NULL, kernel_thread_worker, (void *)&args[i]);
 	 }
+
 	 // 3
+	 for (size_t i = 0; i < NUM_WORKERS; i++) {
+		 pthread_join(threads[i], NULL);
+	 }
+
 	 // 4
      long long total_kernel_sum = 0;
+	 for (size_t i = 0; i < ARRAY_SIZE; i++) {
+		 total_kernel_sum += kernel_thread_sums;
+	 }
+
+	 free(kernel_thread_sums);
 
      long long kernel_duration = get_time_us() - start_time;
      printf("Kernel Thread Time: %lld microseconds\n", kernel_duration);
