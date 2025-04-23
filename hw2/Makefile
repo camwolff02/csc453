@@ -1,20 +1,20 @@
 CC = gcc
 CFLAGS = -std=c99 -Wall -Wextra -pedantic -O2 -D_XOPEN_SOURCE=700
 LDFLAGS = -pthread -lm
-TARGETS = thread
+TARGETS = scheduler
 
 all: $(TARGETS)
 
-thread: thread_lab_skeleton.c
+thread: scheduler_skeleton.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
-debug: thread_lab_skeleton.c
+debug: scheduler_skeleton.c
 	$(CC) $(CFLAGS) -g -o $@ $< $(LDFLAGS)
 
 clean:
 	rm -f $(TARGETS) debug submission.tgz
 
 tar:
-	tar -zcvf submission.tgz thread_lab_skeleton.c README Makefile
+	tar -zcvf submission.tgz scheduler_skeleton.c README Makefile
 
 .PHONY: all clean

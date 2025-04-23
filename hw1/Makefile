@@ -14,6 +14,6 @@ debug: slosh.c
 
 
 clean:
-	rm -f $(TARGETS)
+	rm -f $(TARGETS) debug
 
 .PHONY: all clean
