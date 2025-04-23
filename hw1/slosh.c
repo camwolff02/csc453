@@ -48,7 +48,7 @@ void sigint_handler() {
 	/* NOTE: we shouldn't use printf in a signal handler, we need to set a flag */
 	printf("\n");
 
-	if (!child_running) {
+	if (!child_running) {  // TODO there's a bug with child_running, not always triggered off when it should be (leading to no printing)
 		printf("No child running!\n");
 		display_prompt();
 	} else {

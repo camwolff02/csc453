@@ -1,0 +1,4 @@
+Cameron Wolff
+1. kernel threads are typically faster for this workload because the work can efficiently be split and worked on in parallel, and kernel threads allows work to take place on multiple CPU cores at the same time.
+2. User level tasks might be more efficient for smaller tasks because of the greater overhead in spinning up a kernel thread. Quantitatively, at 4 threads with an array of size 100, user tasks are faster.
+3. As you increase the number of workers beyond the CPU core count, the kernel thread task seems to slow down because the scheduler is doing more context switching without any additional parallelization.

@@ -10,10 +10,10 @@
 
 #define _GNU_SOURCE
 
+#include <sched.h>
 #include <errno.h>
 #include <limits.h>
 #include <pthread.h>
-#include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -95,22 +95,15 @@ void *kernel_thread_worker(void *arg) {
      * 6. Store the result in kernel_thread_sums[thread_id]
      * 7. Return NULL
      */
-	 // 1
      KernelThreadArgs *k_arg = (KernelThreadArgs *) arg;
-	 // 2
 	 int sum = 0;
-	 // 3 (outside of function)
-	 // 4 define locking strategy instead of just trying to lock (the strategy is no thread locking strategy)
-	 // pthread_mutex_lock(&array_mutex);
-	 // 5
+	 set_thread_affinity(k_arg->thread_id);  // always run on the same CPU
+
 	 for (int i = k_arg->start_index; i <= k_arg->end_index; i++) {
 		 sum += global_array[i];
 	 }
-	 // 6
+	 
 	 kernel_thread_sums[k_arg->thread_id] = sum;  // safe because we know we have unique access to this memory address
-
-	 // 7
-	 // pthread_mutex_unlock(&array_mutex);
      return NULL;
 }
  
@@ -265,45 +258,37 @@ void *kernel_thread_worker(void *arg) {
  	 kernel_thread_sums = (long long *)malloc(sizeof(long long) * NUM_WORKERS);
 	 int stride = ARRAY_SIZE / NUM_WORKERS;
 	 int remainder = ARRAY_SIZE % NUM_WORKERS;
-	 size_t arr_idx = 0;
-	 int num_cores = sysconf(_SC_NPROCESSORS_ONLN);
+	 size_t start_idx = 0, end_idx = 0;
+	
+	 printf("STRIDE: %d\n", stride);
+	 printf("REMAINDER: %d\n", remainder);
 
 	 // 2
 	 for (int i = 0; i < NUM_WORKERS; i++) {
 		 // assign work (mutually exclusive array slice) to thread
-		 size_t end_idx = arr_idx + stride - 1;
+		 end_idx = start_idx + stride - 1;
+
 		 if (remainder) {
 			 end_idx++;  
 			 remainder--;
 		 }
-		 args[i] = {i, arr_idx, end_idx};
-		 arr_idx += end_idx + 1;
 
-		 // set cpu affinity so threads always run on the same CPU
-		 cpu_set_t cpuset;
-		 CPU_ZERO(&cpuset);
-		 CPU_SET(i % num_cores, &cpuset);
-		 int s = pthread_setaffinity_np(threads[0], sizeof(cpuset), &cpuset);
-		 if (s != 0) {
-			 errc(EXIT_FAILURE, s, "pthread_setaffinity_np");
-		 }
+		 args[i].thread_id = i;
+		 args[i].start_index = start_idx;
+		 args[i].end_index = end_idx;
+
+		 start_idx = end_idx + 1;
 
 		 // start thread
-	 	 pthread_create(&threads[0], NULL, kernel_thread_worker, (void *)&args[i]);
+	 	 pthread_create(&threads[i], NULL, kernel_thread_worker, (void *)&args[i]);
 	 }
 
-	 // 3
-	 for (size_t i = 0; i < NUM_WORKERS; i++) {
-		 pthread_join(threads[i], NULL);
-	 }
-
-	 // 4
+	 // 3 and 4
      long long total_kernel_sum = 0;
-	 for (size_t i = 0; i < ARRAY_SIZE; i++) {
-		 total_kernel_sum += kernel_thread_sums;
+	 for (int i = 0; i < NUM_WORKERS; i++) {
+		 pthread_join(threads[i], NULL);
+		 total_kernel_sum += kernel_thread_sums[i];
 	 }
-
-	 free(kernel_thread_sums);
 
      long long kernel_duration = get_time_us() - start_time;
      printf("Kernel Thread Time: %lld microseconds\n", kernel_duration);
