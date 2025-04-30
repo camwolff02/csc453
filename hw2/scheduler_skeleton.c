@@ -384,7 +384,7 @@ void load_processes(const char *filename, Process **processes_ptr, int *count) {
  */
 void handle_arrivals(Process *processes, int process_count, int current_time, Algorithm algorithm, 
                    int *arrived_indices, int *arrival_count) {
-    // TODO: Implement process arrival handling
+    // TODO DONE?: Implement process arrival handling
     // 
     // This function should:
     // 1. Set *arrival_count to 0
@@ -395,6 +395,21 @@ void handle_arrivals(Process *processes, int process_count, int current_time, Al
     //
     // Hint: processes[i].arrival_time == current_time indicates a process has just arrived
     *arrival_count = 0; // Initialize arrival count
+
+	for (int i = 0; i < process_count; i++) {
+		if (processes[i].arrival_time == current_time) {
+			switch (algorithm) {
+				case RR:   
+				case SRTF: 
+					processes[i].state = READY;
+					break;
+				case FCFS: 
+				case SJF:  
+					arrived_indices[*arrival_count];
+					*arrival_count++;
+			}		
+		}
+	}
 }
 
 /**
@@ -402,7 +417,7 @@ void handle_arrivals(Process *processes, int process_count, int current_time, Al
  */
 void handle_rr_quantum_expiry(Process *processes, CPU *cpus, int cpu_count, int time_quantum, 
                            ReadyQueue *ready_queue, int current_time) {
-    // TODO: Implement the Round Robin quantum expiration logic
+    // TODO DONE?: Implement the Round Robin quantum expiration logic
     //
     // This function should:
     // 1. Check all CPUs for processes that have used up their time quantum
@@ -414,6 +429,38 @@ void handle_rr_quantum_expiry(Process *processes, CPU *cpus, int cpu_count, int 
     //
     // Note: The current_time parameter is not used but kept for API consistency
     (void)current_time; // Explicitly mark as unused
+
+	/*
+	typedef struct {
+		int id;               // CPU identifier
+		Process *current_process; // Process currently running (NULL if idle)
+		int idle_time;        // Total time CPU was idle
+		int busy_time;        // Total time CPU was busy
+	} CPU;
+
+	typedef struct {
+		int pid;              // Process ID
+		int arrival_time;     // Time when process becomes available
+		int burst_time;       // Total CPU time required
+		int priority;         // Priority (higher value = higher priority)
+		int remaining_time;   // Remaining CPU time needed
+		ProcessState state;   // Current state (WAITING, RUNNING, etc.)
+		int start_time;       // When process first started (-1 if not started)
+		int finish_time;      // When process completed (-1 if not finished)
+		int waiting_time;     // Total time spent waiting
+		int quantum_used;     // Time units used in current quantum (for RR)
+		int response_time;    // Time between arrival and first execution
+	} Process;
+	*/
+
+	for (int i = 0; i < cpu_count; i++) {
+		Process *process = cpus[i].current_process;
+		if (process->quantum_used >= time_quantum) {
+			process->state = READY;
+			cpus[i].current_process = NULL;	
+            enqueue(&ready_queue, process->pid);
+		}
+	}
 }
 
 /**
@@ -812,8 +859,6 @@ void print_results(Process *processes, int process_count, CPU *cpus, int cpu_cou
 
     // Print visual timeline
     print_timeline(timeline, total_time, processes, process_count, cpu_count);
-    
-    // Print detailed statistics
     print_process_stats(processes, process_count);
     print_cpu_stats(cpus, cpu_count);
     print_average_stats(processes, process_count);
