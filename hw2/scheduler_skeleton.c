@@ -172,7 +172,7 @@ void enqueue(ReadyQueue *q, int process_idx) {
 
 /**
  * Remove and return the next process index from the ready queue
- * Returns -1 if queue is empty
+ * Returns -1 if queue is empty TODO handle case where queue is empty
  */
 int dequeue(ReadyQueue *q) {
     if (q->size <= 0) return -1; // Queue empty
@@ -384,7 +384,7 @@ void load_processes(const char *filename, Process **processes_ptr, int *count) {
  */
 void handle_arrivals(Process *processes, int process_count, int current_time, Algorithm algorithm, 
                    int *arrived_indices, int *arrival_count) {
-    // TODO DONE?: Implement process arrival handling
+    // DONE: Implement process arrival handling
     // 
     // This function should:
     // 1. Set *arrival_count to 0
@@ -394,20 +394,16 @@ void handle_arrivals(Process *processes, int process_count, int current_time, Al
     // 5. Increment *arrival_count for each arrived process
     //
     // Hint: processes[i].arrival_time == current_time indicates a process has just arrived
+	
     *arrival_count = 0; // Initialize arrival count
 
 	for (int i = 0; i < process_count; i++) {
 		if (processes[i].arrival_time == current_time) {
-			switch (algorithm) {
-				case RR:   
-				case SRTF: 
-					processes[i].state = READY;
-					break;
-				case FCFS: 
-				case SJF:  
-					arrived_indices[*arrival_count];
-					*arrival_count++;
-			}		
+			if (algorithm == RR || algorithm == SRTF) {
+				processes[i].state = READY;
+			}							
+			arrived_indices[*arrival_count] = i;
+			(*arrival_count)++;
 		}
 	}
 }
@@ -417,7 +413,7 @@ void handle_arrivals(Process *processes, int process_count, int current_time, Al
  */
 void handle_rr_quantum_expiry(Process *processes, CPU *cpus, int cpu_count, int time_quantum, 
                            ReadyQueue *ready_queue, int current_time) {
-    // TODO DONE?: Implement the Round Robin quantum expiration logic
+    // DONE: Implement the Round Robin quantum expiration logic
     //
     // This function should:
     // 1. Check all CPUs for processes that have used up their time quantum
@@ -429,45 +425,25 @@ void handle_rr_quantum_expiry(Process *processes, CPU *cpus, int cpu_count, int 
     //
     // Note: The current_time parameter is not used but kept for API consistency
     (void)current_time; // Explicitly mark as unused
-
-	/*
-	typedef struct {
-		int id;               // CPU identifier
-		Process *current_process; // Process currently running (NULL if idle)
-		int idle_time;        // Total time CPU was idle
-		int busy_time;        // Total time CPU was busy
-	} CPU;
-
-	typedef struct {
-		int pid;              // Process ID
-		int arrival_time;     // Time when process becomes available
-		int burst_time;       // Total CPU time required
-		int priority;         // Priority (higher value = higher priority)
-		int remaining_time;   // Remaining CPU time needed
-		ProcessState state;   // Current state (WAITING, RUNNING, etc.)
-		int start_time;       // When process first started (-1 if not started)
-		int finish_time;      // When process completed (-1 if not finished)
-		int waiting_time;     // Total time spent waiting
-		int quantum_used;     // Time units used in current quantum (for RR)
-		int response_time;    // Time between arrival and first execution
-	} Process;
-	*/
+	(void)processes; // TODO should this be used?
 
 	for (int i = 0; i < cpu_count; i++) {
 		Process *process = cpus[i].current_process;
+
 		if (process->quantum_used >= time_quantum) {
 			process->state = READY;
 			cpus[i].current_process = NULL;	
-            enqueue(&ready_queue, process->pid);
+            enqueue(ready_queue, process->pid);
 		}
 	}
 }
+
 
 /**
  * Implement preemptive scheduling for SRTF
  */
 void handle_srtf_preemption(Process *processes, int process_count, CPU *cpus, int cpu_count, int current_time) {
-    // TODO: Implement Shortest Remaining Time First preemptive logic
+    // DONE: Implement Shortest Remaining Time First preemptive logic
     //
     // This function should:
     // 1. Find the process with the shortest remaining time that's ready to run
@@ -484,6 +460,64 @@ void handle_srtf_preemption(Process *processes, int process_count, CPU *cpus, in
     //    - Set start_time and response_time for the new process if this is its first run
     //
     // Hint: You may need to repeat this until no more preemptions occur
+
+	CPU *preempt_cpu = NULL;
+
+	do {
+		// Decide which process is ready to run next
+		Process *min_process = NULL;
+		for (int i = 0; i < process_count; i++) {
+			Process *process = &processes[i];
+
+			if (process->arrival_time >= current_time 
+				&& process->state == READY 
+				&& (min_process == NULL 
+					|| process->remaining_time < min_process->remaining_time
+					|| (process->remaining_time == min_process->remaining_time 
+						&& process->priority > min_process->priority))) {
+				min_process = process;
+			}
+		}
+
+		// Decide which CPU is ready to kick out its process
+		preempt_cpu = NULL;
+		for (int i = 0; min_process != NULL && i < cpu_count; i++) {
+			Process *process = cpus[i].current_process;
+
+			if (min_process->remaining_time < process->remaining_time 
+				&& (preempt_cpu == NULL 
+					|| preempt_cpu->current_process->priority < process->priority)) {
+
+				preempt_cpu = &cpus[i];
+
+				// Perform preemption
+				preempt_cpu->current_process->state = WAITING;	
+				min_process->state = RUNNING;
+				preempt_cpu->current_process = min_process;
+
+				if (min_process->start_time == -1) {
+					min_process->start_time = current_time;
+					min_process->response_time = current_time - min_process->arrival_time;
+				}
+				break;
+			}
+		}
+	} while (preempt_cpu != NULL);
+}
+
+Process *tie_breaker(Process *p1, Process *p2) {
+	printf("[DEBUG] Runing tie breaker!!!\n");
+	if (p1->priority > p2->priority) {
+		return p1;
+	} else if (p1->priority < p2->priority) {
+		return p2;
+	} else {
+		if (p1->arrival_time <= p2->arrival_time) {
+			return p1;
+		} else {
+			return p2;
+		}
+	}
 }
 
 /**
@@ -509,15 +543,88 @@ void assign_processes_to_idle_cpus(Process *processes, int process_count, CPU *c
     //    - Reset its quantum_used (for RR)
     //    - Update start_time and response_time if this is first execution
     //
-    // Hint: Use a boolean array to track which processes are scheduled in this time step
+    // TODO Hint: Use a boolean array to track which processes are scheduled in this time step
     //       to avoid scheduling the same process on multiple CPUs
+
+	bool scheduled[process_count];
+	for (int i = 0; i < process_count; i++) {
+		scheduled[i] = 0;
+	}
+
+	for (int i = 0; i < cpu_count; i++) {
+		if (cpus[i].current_process != NULL) {
+			continue;  // we only care about idle CPUS
+		}
+
+		Process *new_process = NULL;  // try and find the next process to run
+		
+		if (algorithm == RR) {
+			// Round robin just runs the next process in the queue
+			new_process = &processes[dequeue(ready_queue)];	
+			new_process->quantum_used = 0;
+		} else {
+			// All other algorithms we need to check all processes
+			for (int i = 0; i < process_count; i++) {
+				if (scheduled[i] // TODO do we need this?
+					|| processes[i].state != WAITING 
+					|| processes[i].arrival_time > current_time) {
+					// we only want to look at unscheduled,  waiting processes that have arrived
+					continue;  
+				} else if (new_process == NULL) {
+					printf("[DEBUG | %d] Grabbed process %d with default rule\n", current_time, processes[i].pid);
+					new_process = &processes[i];
+					continue;
+				} 
+
+				switch (algorithm) {
+				case FCFS:
+					printf("[DEBUG | %d] Checking FCFS Rule for process %d...\n", current_time, processes[i].pid);
+					if (processes[i].arrival_time < new_process->arrival_time) {
+						new_process = &processes[i];
+						printf("[DEBUG | %d] Grabbed process %d with FCFS rule\n", current_time,  new_process->pid);
+					} else {
+						new_process = tie_breaker(new_process, &processes[i]);
+					}
+					break;
+				case SJF:	
+					if (processes[i].burst_time < new_process->burst_time) {
+						new_process = &processes[i];
+						printf("[DEBUG | %d] Grabbed process %d with SJF rule\n", current_time, new_process->pid);
+					} else {
+						new_process = tie_breaker(new_process, &processes[i]);
+					}
+					break; 							
+				case SRTF:
+					if (processes[i].remaining_time < new_process->remaining_time) {
+						new_process = &processes[i];
+						printf("[DEBUG | %d] Grabbed process %d with SJF rule\n", current_time, new_process->pid);
+					} else {
+						new_process = tie_breaker(new_process, &processes[i]);
+					}
+					break;
+				case RR:  
+					break;   // do nothing
+				}
+			}
+
+			if (new_process != NULL) {
+				printf("[DEBUG | %d] Scheduling  process %d\n", current_time, new_process->pid);
+				new_process->state = RUNNING;
+				cpus[i].current_process = new_process;
+				if (new_process->response_time == -1) {
+					new_process->start_time = current_time;
+					new_process->response_time = current_time - new_process->arrival_time;
+				}
+			}
+		}
+	}
 }
 
 /**
  * Update waiting times for all waiting processes
  */
 void update_waiting_times(Process *processes, int process_count, int current_time) {
-    // TODO: Implement waiting time tracking
+    // DONE: Implement waiting time tracking
     //
     // This function should:
     // 1. Iterate through all processes
@@ -528,14 +635,25 @@ void update_waiting_times(Process *processes, int process_count, int current_tim
     //    Increment its waiting_time by 1
     //
     // Hint: Waiting time is used to calculate performance metrics
+	
+	for (int i = 0; i < process_count; i++) {
+		if (processes[i].arrival_time <= current_time 
+			&& processes[i].state != COMPLETED
+			&& processes[i].state != RUNNING) {
+			
+			processes[i].waiting_time++;
+		}
+	}
 }
 
 /**
  * Execute processes on CPUs for the current time step
  */
+// TODO process is not being set to completed correctly and process is not getting 
+// kicked out when its done
 void execute_processes(Process *processes, int process_count, CPU *cpus, int cpu_count, 
                      int current_time, int *completed_count) {
-    // TODO: Implement CPU execution of processes for current time step
+    // DONE: Implement CPU execution of processes for current time step
     //
     // This function should:
     // 1. For each CPU:
@@ -554,6 +672,25 @@ void execute_processes(Process *processes, int process_count, CPU *cpus, int cpu
     // Note: processes and process_count parameters are not used in this implementation
     (void)processes;
     (void)process_count;
+
+	for (int i = 0; i < cpu_count; i++) {
+		Process *process = cpus[i].current_process;
+
+		if (process != NULL) {
+			process->remaining_time--;
+			process->quantum_used++;  // only used by RR
+			cpus[i].busy_time++;
+
+			if (process->remaining_time <= 0) {
+				process->state = COMPLETED;	
+				process->finish_time = current_time + 1;
+				cpus[i].current_process = NULL;
+				(*completed_count)++;
+			}
+		} else {
+			cpus[i].idle_time++;
+		}
+	}
 }
 
 /************************* MAIN SIMULATION *************************/

@@ -5,7 +5,7 @@ TARGETS = scheduler
 
 all: $(TARGETS)
 
-thread: scheduler_skeleton.c
+scheduler: scheduler_skeleton.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
 debug: scheduler_skeleton.c
