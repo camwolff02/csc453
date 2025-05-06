@@ -477,14 +477,7 @@ void handle_srtf_preemption(Process *processes, int process_count, CPU *cpus, in
 					|| (process->remaining_time == min_process->remaining_time 
 						&& process->priority > min_process->priority))) {
 				min_process = process;
-			} else {
-				printf("[DEBUG] Current time: %d\n", current_time);
-				printf("[DEBUG] Arrival Time: %d\n", process->arrival_time);
-				printf("[DEBUG] Process pid: %d\n", process->pid);
-				printf("[DEBUG] Process State: %d\n", process->state);
-				printf("[DEBUG] Min Process: %d\n", min_process);
-				printf(".......................................\n");
-			}
+			} 		
 		}
 
 		if (min_process == NULL) {
@@ -495,7 +488,7 @@ void handle_srtf_preemption(Process *processes, int process_count, CPU *cpus, in
 
 		// Decide which CPU is ready to kick out its process
 		preempt_cpu = NULL;
-		if (cpus == NULL) printf("CPUS IS NULL!!!!\n");
+
 		for (int i = 0; i < cpu_count; i++) {
 			printf("[DEBUG] On CPU %d\n", i);
 			Process *curr_process = cpus[i].current_process;  
@@ -534,14 +527,15 @@ Process *tie_breaker(Process *p1, Process *p2) {
 	printf("[DEBUG] Runing tie breaker!!!\n");
 	if (p1->priority > p2->priority) {
 		return p1;
-	} else if (p1->priority < p2->priority) {
+	} else if (p2->priority > p1->priority) {
+		return p2;
+	} else if (p1->arrival_time < p2->arrival_time) {
+		return p1;
+	} else if (p2->arrival_time < p1->arrival_time) {
 		return p2;
 	} else {
-		if (p1->arrival_time <= p2->arrival_time) {
-			return p1;
-		} else {
-			return p2;
-		}
+		printf("[DEBUG] WE'VE FUCKED UP IF WE'RE HERE\n");
+		return p1;
 	}
 }
 
@@ -577,69 +571,70 @@ void assign_processes_to_idle_cpus(Process *processes, int process_count, CPU *c
 	}
 
 	for (int i = 0; i < cpu_count; i++) {
+		Process *new_process = NULL;  // try and find the next process to run
+
 		if (cpus[i].current_process != NULL) {
 			continue;  // we only care about idle CPUS
 		}
-
-		Process *new_process = NULL;  // try and find the next process to run
 		
 		if (algorithm == RR) {
 			// Round robin just runs the next process in the queue
 			new_process = &processes[dequeue(ready_queue)];	
 			new_process->quantum_used = 0;
-		} else {
-			// All other algorithms we need to check all processes
-			for (int i = 0; i < process_count; i++) {
-				if (scheduled[i] // TODO do we need this?
-					|| processes[i].state != WAITING 
-					|| processes[i].arrival_time > current_time) {
-					// we only want to look at unscheduled,  waiting processes that have arrived
-					continue;  
-				} else if (new_process == NULL) {
-					printf("[DEBUG | %d] Grabbed process %d with default rule\n", current_time, processes[i].pid);
+			continue;
+		} 
+
+		// All other algorithms we need to check all processes
+		for (int i = 0; i < process_count; i++) {
+			if (scheduled[i] // TODO do we need this?
+				|| processes[i].state != WAITING 
+				|| processes[i].arrival_time > current_time) {
+				// we only want to look at unscheduled,  waiting processes that have arrived
+				continue;  
+			} else if (new_process == NULL) {
+				printf("[DEBUG | %d] Grabbed process %d with default rule\n", current_time, processes[i].pid);
+				new_process = &processes[i];
+				continue;
+			} 
+
+			switch (algorithm) {
+			case FCFS:
+				printf("[DEBUG | %d] Checking FCFS Rule for process %d...\n", current_time, processes[i].pid);
+				if (processes[i].arrival_time < new_process->arrival_time) {
 					new_process = &processes[i];
-					continue;
-				} 
-
-				switch (algorithm) {
-				case FCFS:
-					printf("[DEBUG | %d] Checking FCFS Rule for process %d...\n", current_time, processes[i].pid);
-					if (processes[i].arrival_time < new_process->arrival_time) {
-						new_process = &processes[i];
-						printf("[DEBUG | %d] Grabbed process %d with FCFS rule\n", current_time,  new_process->pid);
-					} else {
-						new_process = tie_breaker(new_process, &processes[i]);
-					}
-					break;
-				case SJF:	
-					if (processes[i].burst_time < new_process->burst_time) {
-						new_process = &processes[i];
-						printf("[DEBUG | %d] Grabbed process %d with SJF rule\n", current_time, new_process->pid);
-					} else {
-						new_process = tie_breaker(new_process, &processes[i]);
-					}
-					break; 							
-				case SRTF:
-					if (processes[i].remaining_time < new_process->remaining_time) {
-						new_process = &processes[i];
-						printf("[DEBUG | %d] Grabbed process %d with SJF rule\n", current_time, new_process->pid);
-					} else {
-						new_process = tie_breaker(new_process, &processes[i]);
-					}
-					break;
-				case RR:  
-					break;   // do nothing
+					printf("[DEBUG | %d] Grabbed process %d with FCFS rule\n", current_time,  new_process->pid);
+				} else if (processes[i].arrival_time == new_process->arrival_time) {
+					new_process = tie_breaker(new_process, &processes[i]);
 				}
+				break;
+			case SJF:	
+				if (processes[i].burst_time < new_process->burst_time) {
+					new_process = &processes[i];
+					printf("[DEBUG | %d] Grabbed process %d with SJF rule\n", current_time, new_process->pid);
+				} else if (processes[i].burst_time == new_process->burst_time) {
+					new_process = tie_breaker(new_process, &processes[i]);
+				}
+				break; 							
+			case SRTF:
+				if (processes[i].remaining_time < new_process->remaining_time) {
+					new_process = &processes[i];
+					printf("[DEBUG | %d] Grabbed process %d with SJF rule\n", current_time, new_process->pid);
+				} else if (processes[i].remaining_time == new_process->remaining_time) {
+					new_process = tie_breaker(new_process, &processes[i]);
+				}
+				break;
+			case RR:  
+				break;   // do nothing
 			}
+		}
 
-			if (new_process != NULL) {
-				printf("[DEBUG | %d] Scheduling  process %d\n", current_time, new_process->pid);
-				new_process->state = RUNNING;
-				cpus[i].current_process = new_process;
-				if (new_process->response_time == -1) {
-					new_process->start_time = current_time;
-					new_process->response_time = current_time - new_process->arrival_time;
-				}
+		if (new_process != NULL) {
+			printf("[DEBUG | %d] Scheduling  process %d\n", current_time, new_process->pid);
+			new_process->state = RUNNING;
+			cpus[i].current_process = new_process;
+			if (new_process->response_time == -1) {
+				new_process->start_time = current_time;
+				new_process->response_time = current_time - new_process->arrival_time;
 			}
 		}
 	}
