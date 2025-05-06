@@ -427,10 +427,11 @@ void handle_rr_quantum_expiry(Process *processes, CPU *cpus, int cpu_count, int 
     (void)current_time; // Explicitly mark as unused
 	(void)processes; // TODO should this be used?
 
+	printf("[DEBUG] Handling rr preemption\n");
 	for (int i = 0; i < cpu_count; i++) {
 		Process *process = cpus[i].current_process;
 
-		if (process->quantum_used >= time_quantum) {
+		if (process != NULL && process->quantum_used >= time_quantum) {
 			process->state = READY;
 			cpus[i].current_process = NULL;	
             enqueue(ready_queue, process->pid);
@@ -579,9 +580,15 @@ void assign_processes_to_idle_cpus(Process *processes, int process_count, CPU *c
 		
 		if (algorithm == RR) {
 			// Round robin just runs the next process in the queue
-			new_process = &processes[dequeue(ready_queue)];	
-			new_process->quantum_used = 0;
-			continue;
+			int idx = dequeue(ready_queue);
+
+			if (idx > -1) {
+				new_process = &processes[idx];	
+				new_process->quantum_used = 0;
+				printf("[DEBUG] adding a new process %d\n", new_process->pid);
+			} else {
+				break;
+			}
 		} 
 
 		// All other algorithms we need to check all processes
@@ -590,41 +597,40 @@ void assign_processes_to_idle_cpus(Process *processes, int process_count, CPU *c
 				|| processes[i].state != WAITING 
 				|| processes[i].arrival_time > current_time) {
 				// we only want to look at unscheduled,  waiting processes that have arrived
-				continue;  
 			} else if (new_process == NULL) {
 				printf("[DEBUG | %d] Grabbed process %d with default rule\n", current_time, processes[i].pid);
 				new_process = &processes[i];
 				continue;
-			} 
-
-			switch (algorithm) {
-			case FCFS:
-				printf("[DEBUG | %d] Checking FCFS Rule for process %d...\n", current_time, processes[i].pid);
-				if (processes[i].arrival_time < new_process->arrival_time) {
-					new_process = &processes[i];
-					printf("[DEBUG | %d] Grabbed process %d with FCFS rule\n", current_time,  new_process->pid);
-				} else if (processes[i].arrival_time == new_process->arrival_time) {
-					new_process = tie_breaker(new_process, &processes[i]);
+			} else {
+				switch (algorithm) {
+				case FCFS:
+					printf("[DEBUG | %d] Checking FCFS Rule for process %d...\n", current_time, processes[i].pid);
+					if (processes[i].arrival_time < new_process->arrival_time) {
+						new_process = &processes[i];
+						printf("[DEBUG | %d] Grabbed process %d with FCFS rule\n", current_time,  new_process->pid);
+					} else if (processes[i].arrival_time == new_process->arrival_time) {
+						new_process = tie_breaker(new_process, &processes[i]);
+					}
+					break;
+				case SJF:	
+					if (processes[i].burst_time < new_process->burst_time) {
+						new_process = &processes[i];
+						printf("[DEBUG | %d] Grabbed process %d with SJF rule\n", current_time, new_process->pid);
+					} else if (processes[i].burst_time == new_process->burst_time) {
+						new_process = tie_breaker(new_process, &processes[i]);
+					}
+					break; 							
+				case SRTF:
+					if (processes[i].remaining_time < new_process->remaining_time) {
+						new_process = &processes[i];
+						printf("[DEBUG | %d] Grabbed process %d with SJF rule\n", current_time, new_process->pid);
+					} else if (processes[i].remaining_time == new_process->remaining_time) {
+						new_process = tie_breaker(new_process, &processes[i]);
+					}
+					break;
+				case RR:  
+					break;   // do nothing
 				}
-				break;
-			case SJF:	
-				if (processes[i].burst_time < new_process->burst_time) {
-					new_process = &processes[i];
-					printf("[DEBUG | %d] Grabbed process %d with SJF rule\n", current_time, new_process->pid);
-				} else if (processes[i].burst_time == new_process->burst_time) {
-					new_process = tie_breaker(new_process, &processes[i]);
-				}
-				break; 							
-			case SRTF:
-				if (processes[i].remaining_time < new_process->remaining_time) {
-					new_process = &processes[i];
-					printf("[DEBUG | %d] Grabbed process %d with SJF rule\n", current_time, new_process->pid);
-				} else if (processes[i].remaining_time == new_process->remaining_time) {
-					new_process = tie_breaker(new_process, &processes[i]);
-				}
-				break;
-			case RR:  
-				break;   // do nothing
 			}
 		}
 
