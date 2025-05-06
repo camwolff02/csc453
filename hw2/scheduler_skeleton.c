@@ -464,38 +464,63 @@ void handle_srtf_preemption(Process *processes, int process_count, CPU *cpus, in
 	CPU *preempt_cpu = NULL;
 
 	do {
+		printf("[DEBUG] Decide which process is ready to run next\n");
 		// Decide which process is ready to run next
 		Process *min_process = NULL;
 		for (int i = 0; i < process_count; i++) {
 			Process *process = &processes[i];
 
-			if (process->arrival_time >= current_time 
+			if (process->arrival_time <= current_time 
 				&& process->state == READY 
 				&& (min_process == NULL 
 					|| process->remaining_time < min_process->remaining_time
 					|| (process->remaining_time == min_process->remaining_time 
 						&& process->priority > min_process->priority))) {
 				min_process = process;
+			} else {
+				printf("[DEBUG] Current time: %d\n", current_time);
+				printf("[DEBUG] Arrival Time: %d\n", process->arrival_time);
+				printf("[DEBUG] Process pid: %d\n", process->pid);
+				printf("[DEBUG] Process State: %d\n", process->state);
+				printf("[DEBUG] Min Process: %d\n", min_process);
+				printf(".......................................\n");
 			}
 		}
 
+		if (min_process == NULL) {
+			break;  // We can't preempt if there's no processes to run
+		}
+
+		printf("[DEBUG] We are trying to run process %d\n", min_process->pid);
+
 		// Decide which CPU is ready to kick out its process
 		preempt_cpu = NULL;
-		for (int i = 0; min_process != NULL && i < cpu_count; i++) {
-			Process *process = cpus[i].current_process;
-
-			if (min_process->remaining_time < process->remaining_time 
+		if (cpus == NULL) printf("CPUS IS NULL!!!!\n");
+		for (int i = 0; i < cpu_count; i++) {
+			printf("[DEBUG] On CPU %d\n", i);
+			Process *curr_process = cpus[i].current_process;  
+			
+			if (curr_process == NULL 
+				|| (min_process->remaining_time < curr_process->remaining_time 
 				&& (preempt_cpu == NULL 
-					|| preempt_cpu->current_process->priority < process->priority)) {
+					|| preempt_cpu->current_process->priority < curr_process->priority))) {
 
+				printf("[DEBUG] doing preemption \n");
 				preempt_cpu = &cpus[i];
+				printf("[DEBUG] 1\n");
 
 				// Perform preemption
-				preempt_cpu->current_process->state = WAITING;	
+				if (curr_process != NULL) {
+					preempt_cpu->current_process->state = WAITING;	
+				}
+				printf("[DEBUG] 2\n");
 				min_process->state = RUNNING;
+				printf("[DEBUG] 3\n");
 				preempt_cpu->current_process = min_process;
+				printf("[DEBUG] 4\n");
 
 				if (min_process->start_time == -1) {
+					printf("[DEBUG] 5\n");
 					min_process->start_time = current_time;
 					min_process->response_time = current_time - min_process->arrival_time;
 				}
