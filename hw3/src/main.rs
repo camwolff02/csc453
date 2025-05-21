@@ -168,7 +168,6 @@ impl TLB {
 }
 
 fn main() {
-    
     let args = Cli::parse();
 
     println!("Reference Sequence file: {:?}", args.file);
