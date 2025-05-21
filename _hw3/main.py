@@ -1,4 +1,5 @@
 from argparse import ArgumentParser
+from dataclasses import dataclass
 
 parser = ArgumentParser(
     prog="program Name", description="Description", epilog="bottom text"
@@ -42,6 +43,13 @@ class VirtualMemoryManager:
         self.reference_sequence = None
 
 
+@dataclass
+class PhysicalAddress:
+    address: int
+    page: int
+    offset: int
+
+
 def main():
     args = parser.parse_args()
     args  # prevent not accessed warning
@@ -50,7 +58,14 @@ def main():
     vmm  # prevent not accessed warning
 
     with open(args.reference_sequence_file) as f:
-        address = int(f.readline())
+        logical_address = int(f.readline())
+
+        physical_address = PhysicalAddress(
+            address=logical_address & 0xFFFF,
+            page=(logical_address >> 16) & 0xFF,
+            offset=(logical_address >> 24) & 0xFF,
+        )
+        physical_address
 
 
 if __name__ == "__main__":
