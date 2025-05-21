@@ -9,27 +9,27 @@ struct PageTableEntry {
 }
 
 impl PageReplacementAlgorithm {
-    fn algorithm(&self, page_table: &mut Vec<PageTableEntry>, all_pns: &Vec<usize>, present_idx: usize) -> usize {
+    fn algorithm(&self, ram_frames: &mut Vec<PageTableEntry>, all_pns: &Vec<usize>, present_idx: usize) -> usize {
         match self {
-            PageReplacementAlgorithm::FIFO => fifo(page_table, all_pns, present_idx),
-            PageReplacementAlgorithm::LRU => lru(page_table, all_pns, present_idx),
-            PageReplacementAlgorithm::OPT => opt(page_table, all_pns, present_idx),
+            PageReplacementAlgorithm::FIFO => fifo(ram_frames, all_pns, present_idx),
+            PageReplacementAlgorithm::LRU => lru(ram_frames, all_pns, present_idx),
+            PageReplacementAlgorithm::OPT => opt(ram_frames, all_pns, present_idx),
         }
     }
 }
 
-fn opt(page_table: &mut Vec<PageTableEntry>, all_pns: &Vec<usize>, present_idx: usize) -> usize {
+fn opt(ram_frames: &mut Vec<PageTableEntry>, all_pns: &Vec<usize>, present_idx: usize) -> usize {
     let mut longest_dist: usize = 0;
     let mut longest_pn_idx: usize = 0;
 
     // If we're at the final page number
     if present_idx == all_pns.len()-1 {
         // It doesn't matter who we eject
-       return eject(page_table, all_pns, present_idx, 0)
+       return eject(ram_frames, all_pns, present_idx, 0)
     }
 
     // For each page number in the page table
-    for (idx, entry) in page_table.iter().enumerate() {
+    for (idx, entry) in ram_frames.iter().enumerate() {
         let mut found: bool = false;
 
         // Find the soonest occurrence of this page number in the future
@@ -56,22 +56,22 @@ fn opt(page_table: &mut Vec<PageTableEntry>, all_pns: &Vec<usize>, present_idx: 
         }
     }
 
-    eject(page_table, all_pns, present_idx, longest_pn_idx)
+    eject(ram_frames, all_pns, present_idx, longest_pn_idx)
 }
 
 
-fn lru(page_table: &mut Vec<PageTableEntry>, all_pns: &Vec<usize>, present_idx: usize) -> usize {
+fn lru(ram_frames: &mut Vec<PageTableEntry>, all_pns: &Vec<usize>, present_idx: usize) -> usize {
     let mut longest_dist: usize = 0;
     let mut longest_pn_idx: usize = 0;
 
     // If we're at the final page number
     if present_idx == all_pns.len()-1 {
         // It doesn't matter who we eject
-       return eject(page_table, all_pns, present_idx, 0)
+       return eject(ram_frames, all_pns, present_idx, 0)
     }
 
     // For each page number in the page table
-    for (idx, entry) in page_table.iter().enumerate() {
+    for (idx, entry) in ram_frames.iter().enumerate() {
         // Find the closest occurrence of this page number in the past
         for past_idx in 0..present_idx-1 {
             if entry.pn == all_pns[past_idx]{
@@ -88,16 +88,16 @@ fn lru(page_table: &mut Vec<PageTableEntry>, all_pns: &Vec<usize>, present_idx: 
         }    
     }
 
-    eject(page_table, all_pns, present_idx, longest_pn_idx)
+    eject(ram_frames, all_pns, present_idx, longest_pn_idx)
 
 }
 
-fn fifo(page_table: &mut Vec<PageTableEntry>, all_pns: &Vec<usize>, present_idx: usize) -> usize {
+fn fifo(ram_frames: &mut Vec<PageTableEntry>, all_pns: &Vec<usize>, present_idx: usize) -> usize {
     let mut oldest_time= usize::MAX;
     let mut oldest_idx: usize = 0;
 
     // For each page number in the page table
-    for (idx, entry) in page_table.iter().enumerate() {
+    for (idx, entry) in ram_frames.iter().enumerate() {
         // Find if this is the oldest page number inserted into the page table
         if entry.insertion_time < oldest_time {
             oldest_time = entry.insertion_time;
@@ -105,12 +105,12 @@ fn fifo(page_table: &mut Vec<PageTableEntry>, all_pns: &Vec<usize>, present_idx:
         }
     }
 
-    eject(page_table, all_pns, present_idx, oldest_idx)
+    eject(ram_frames, all_pns, present_idx, oldest_idx)
 }
 
-fn eject(page_table: &mut Vec<PageTableEntry>, all_pns: &Vec<usize>, present_idx: usize, replace_idx: usize) -> usize {
-    let ejected_pn = page_table[replace_idx].pn;
-    page_table[replace_idx] = PageTableEntry {
+fn eject(ram_frames: &mut Vec<PageTableEntry>, all_pns: &Vec<usize>, present_idx: usize, replace_idx: usize) -> usize {
+    let ejected_pn = ram_frames[replace_idx].pn;
+    ram_frames[replace_idx] = PageTableEntry {
         insertion_time: present_idx, 
         pn: all_pns[present_idx]
     };
@@ -178,41 +178,43 @@ fn main() {
     const TLB_ENTRIES: usize = 16;
 
     let mut tlb = TLB::new(TLB_ENTRIES);
+    let mut ram_frames: Vec<PageTableEntry> = Vec::with_capacity(args.frames);
 
     let mut tlb_misses = 0;
     let mut page_faults = 0;
 
-    let mut page_table: Vec<PageTableEntry> = Vec::with_capacity(args.frames);
     // let backing_store = File::open("backing_store.bin");
 
     // 1. Get all the the page numbers fromt the file
     let contents = fs::read_to_string(args.file)
         .expect("Not able to read file!");
 
-    let page_numbers_zipped: Vec<(usize, usize)> = contents
+    // Structured as logical address, page number, offset
+    let page_numbers_zipped: Vec<(i32, i32,i32)> = contents
         .split('\n')
         .map(|string| string.parse().expect("Not valid a number!"))
-        .map(|logical_address| (logical_address, logical_address & 0xFF))
+        .map(|address| (address, address >> 8usize & 0xFF, address & 0xFF))
         .collect();
     
     let page_numbers: Vec<usize> = page_numbers_zipped
-        .iter().map(|(_, pn)| *pn).collect();
+        .iter().map(|(_, pn, _)| *pn as usize).collect();
 
     // Check the TLB, if in TLB move on, else look at Page Table
     for (i, page_number) in page_numbers.iter().enumerate() {
         if !tlb.contains(*page_number) {
-            if page_table.iter().any(|entry| entry.pn == *page_number) {
+            if ram_frames.iter().any(|entry| entry.pn == *page_number) {
+                tlb.push(*page_number);
                 tlb_misses += 1;  // We have a soft miss
             } else {
                 // We have a hard miss
-                if page_table.len() < page_table.capacity() {  // fill up normally until full
+                if ram_frames.len() < ram_frames.capacity() {  // fill up normally until full
                     // Just fill up normally until full
-                    page_table.push(PageTableEntry {
+                    ram_frames.push(PageTableEntry {
                         insertion_time: i,
                         pn: *page_number
                     });
                 } else {  // When full, eject from the page table using strategy
-                    let ejected_page_number = args.pra.algorithm(&mut page_table, &page_numbers, i);
+                    let ejected_page_number = args.pra.algorithm(&mut ram_frames, &page_numbers, i);
                     tlb.remove(ejected_page_number);
     
                 }
@@ -224,8 +226,11 @@ fn main() {
     }
 
     // Print info from backing store at PN
-    for (logical_address, _page_number) in page_numbers_zipped {
-        println!("{}", logical_address);
+    for (logical_address, page_number, offset) in page_numbers_zipped {
+        // NOTE DON'T PRINT OFFSET, just SIGNED value of BYTE in offset
+        // NOTE DON'T PRINT PAGE NUMBER, print index in ram_frames when page_number is inserted
+        println!("{}, {}, {}", logical_address, offset, page_number);
+        // From backing store, seek page_number * 256
     }
 
     
