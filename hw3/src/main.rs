@@ -9,7 +9,7 @@ struct PageTableEntry {
 }
 
 impl PageReplacementAlgorithm {
-    fn algorithm(&self, ram_frames: &mut Vec<PageTableEntry>, all_pns: &Vec<usize>, present_idx: usize) -> usize {
+    fn algorithm(&self, ram_frames: &mut Vec<PageTableEntry>, all_pns: &Vec<usize>, present_idx: usize) -> (usize, usize) {
         match self {
             PageReplacementAlgorithm::FIFO => fifo(ram_frames, all_pns, present_idx),
             PageReplacementAlgorithm::LRU => lru(ram_frames, all_pns, present_idx),
@@ -18,14 +18,14 @@ impl PageReplacementAlgorithm {
     }
 }
 
-fn opt(ram_frames: &mut Vec<PageTableEntry>, all_pns: &Vec<usize>, present_idx: usize) -> usize {
+fn opt(ram_frames: &mut Vec<PageTableEntry>, all_pns: &Vec<usize>, present_idx: usize) -> (usize, usize) {
     let mut longest_dist: usize = 0;
     let mut longest_pn_idx: usize = 0;
 
     // If we're at the final page number
     if present_idx == all_pns.len()-1 {
         // It doesn't matter who we eject
-       return eject(ram_frames, all_pns, present_idx, 0)
+       return (0, eject(ram_frames, all_pns, present_idx, 0))
     }
 
     // For each page number in the page table
@@ -56,18 +56,18 @@ fn opt(ram_frames: &mut Vec<PageTableEntry>, all_pns: &Vec<usize>, present_idx: 
         }
     }
 
-    eject(ram_frames, all_pns, present_idx, longest_pn_idx)
+    (longest_pn_idx, eject(ram_frames, all_pns, present_idx, longest_pn_idx))
 }
 
 
-fn lru(ram_frames: &mut Vec<PageTableEntry>, all_pns: &Vec<usize>, present_idx: usize) -> usize {
+fn lru(ram_frames: &mut Vec<PageTableEntry>, all_pns: &Vec<usize>, present_idx: usize) -> (usize, usize) {
     let mut longest_dist: usize = 0;
     let mut longest_pn_idx: usize = 0;
 
     // If we're at the final page number
     if present_idx == all_pns.len()-1 {
         // It doesn't matter who we eject
-       return eject(ram_frames, all_pns, present_idx, 0)
+       return (0, eject(ram_frames, all_pns, present_idx, 0))
     }
 
     // For each page number in the page table
@@ -88,11 +88,10 @@ fn lru(ram_frames: &mut Vec<PageTableEntry>, all_pns: &Vec<usize>, present_idx: 
         }    
     }
 
-    eject(ram_frames, all_pns, present_idx, longest_pn_idx)
-
+    (longest_pn_idx, eject(ram_frames, all_pns, present_idx, longest_pn_idx))
 }
 
-fn fifo(ram_frames: &mut Vec<PageTableEntry>, all_pns: &Vec<usize>, present_idx: usize) -> usize {
+fn fifo(ram_frames: &mut Vec<PageTableEntry>, all_pns: &Vec<usize>, present_idx: usize) -> (usize, usize) {
     let mut oldest_time= usize::MAX;
     let mut oldest_idx: usize = 0;
 
@@ -105,7 +104,7 @@ fn fifo(ram_frames: &mut Vec<PageTableEntry>, all_pns: &Vec<usize>, present_idx:
         }
     }
 
-    eject(ram_frames, all_pns, present_idx, oldest_idx)
+    (oldest_idx, eject(ram_frames, all_pns, present_idx, oldest_idx))
 }
 
 fn eject(ram_frames: &mut Vec<PageTableEntry>, all_pns: &Vec<usize>, present_idx: usize, replace_idx: usize) -> usize {
@@ -201,6 +200,8 @@ fn main() {
 
     // Check the TLB, if in TLB move on, else look at Page Table
     for (i, page_number) in page_numbers.iter().enumerate() {
+        let mut page_frame_idx = usize::MAX;        
+
         if !tlb.contains(*page_number) {
             if ram_frames.iter().any(|entry| entry.pn == *page_number) {
                 tlb.push(*page_number);  // If it's in ram but not TLB, add to TLB
@@ -209,30 +210,29 @@ fn main() {
                 // We have a hard miss
                 if ram_frames.len() < ram_frames.capacity() {  // fill up normally until full
                     // Just fill up normally until full
+                    page_frame_idx = ram_frames.len();  // TODO is this right??????????
                     ram_frames.push(PageTableEntry {
                         insertion_time: i,
                         pn: *page_number
                     });
                 } else {  // When full, eject from the page table using strategy
-                    let ejected_page_number = args.pra.algorithm(&mut ram_frames, &page_numbers, i);
+                    let (frame_idx, ejected_page_number) = args.pra.algorithm(&mut ram_frames, &page_numbers, i);
                     tlb.remove(ejected_page_number);
-    
+                    page_frame_idx = frame_idx;
                 }
                page_faults += 1;
             }
 
             tlb.push(*page_number);
         }
-    }
 
-    // Print info from backing store at PN
-    for (logical_address, page_number, offset) in page_numbers_zipped {
+        // Print all the juicy info
+        let (logical_address, _page_number, offset) = page_numbers_zipped[i];
         // NOTE DON'T PRINT OFFSET, just SIGNED value of BYTE in offset
         // NOTE DON'T PRINT PAGE NUMBER, print index in ram_frames when page_number is inserted
-        println!("{}, {}, {}", logical_address, offset, page_number);
+        println!("{}, {}, {}", logical_address, offset, page_frame_idx);
         // From backing store, seek page_number * 256
     }
-
     
     // Print statistics from TLB and RAM Operations
     let addresses = page_numbers.len();
