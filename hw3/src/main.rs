@@ -203,7 +203,7 @@ fn main() {
     for (i, page_number) in page_numbers.iter().enumerate() {
         if !tlb.contains(*page_number) {
             if ram_frames.iter().any(|entry| entry.pn == *page_number) {
-                tlb.push(*page_number);
+                tlb.push(*page_number);  // If it's in ram but not TLB, add to TLB
                 tlb_misses += 1;  // We have a soft miss
             } else {
                 // We have a hard miss
