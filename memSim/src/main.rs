@@ -2,12 +2,11 @@ use clap::Parser;
 use std::{
     fs,
     io::{Read, Seek, SeekFrom},
-    usize,
 };
 mod cli;
 use cli::{Cli, PageReplacementAlgorithm};
 mod tlb;
-use tlb::TLB;
+use tlb::Tlb;
 
 struct PageTableEntry {
     insertion_time: usize,
@@ -22,9 +21,9 @@ impl PageReplacementAlgorithm {
         present_idx: usize,
     ) -> (usize, usize) {
         match self {
-            PageReplacementAlgorithm::FIFO => fifo(ram_frames, all_pns, present_idx),
-            PageReplacementAlgorithm::LRU => lru(ram_frames, all_pns, present_idx),
-            PageReplacementAlgorithm::OPT => opt(ram_frames, all_pns, present_idx),
+            PageReplacementAlgorithm::Fifo => fifo(ram_frames, all_pns, present_idx),
+            PageReplacementAlgorithm::Lru => lru(ram_frames, all_pns, present_idx),
+            PageReplacementAlgorithm::Opt => opt(ram_frames, all_pns, present_idx),
         }
     }
 }
@@ -48,13 +47,12 @@ fn opt(
         let mut found: bool = false;
 
         // Find the soonest occurrence of this page number in the future
-        for future_idx in present_idx + 1..all_pns.len() {
-            if entry.pn == all_pns[future_idx] {
+        for (future_idx, pn) in all_pns.iter().enumerate().skip(present_idx + 1) {
+            if entry.pn == *pn {
                 let dist = future_idx - present_idx;
                 found = true;
 
-                // If this is farther than the last page number we found,
-                // save it to kick out
+                // If this is farther than the last page number we found, save it to kick out
                 if dist > longest_dist {
                     longest_dist = dist;
                     longest_pn_idx = idx;
@@ -94,12 +92,11 @@ fn lru(
     // For each page number in the page table
     for (idx, entry) in ram_frames.iter().enumerate() {
         // Find the closest occurrence of this page number in the past
-        for past_idx in 0..present_idx - 1 {
-            if entry.pn == all_pns[past_idx] {
+        for (past_idx, pn) in all_pns.iter().enumerate().take(present_idx - 1) {
+            if entry.pn == *pn {
                 let dist = present_idx - past_idx;
 
-                // If this is farther than the last page number we found,
-                // save it to kick out
+                // If this is farther than the last page number we found, save it to kick out
                 if dist > longest_dist {
                     longest_dist = dist;
                     longest_pn_idx = idx;
@@ -142,7 +139,7 @@ fn main() {
     /**********STRUCTURE DECLARATION**********/
     let args = Cli::parse();
 
-    let mut tlb = TLB::new(args.tlb_entries);
+    let mut tlb = Tlb::new(args.tlb_entries);
     let mut ram_frames: Vec<PageTableEntry> = Vec::with_capacity(args.frames);
 
     let mut tlb_misses = 0;
@@ -154,19 +151,16 @@ fn main() {
     /**********FILE PARSING**********/
     // Get all the the page numbers fromt the file
     let contents = fs::read_to_string(&args.file)
-        .expect(format!("Unable to read file: {}", args.file.display()).as_str());
+        .unwrap_or_else(|_| panic!("Unable to read file: {}", args.file.display()));
 
     // Structured as logical address, page number, offset
     let page_numbers_zipped: Vec<(usize, usize, usize)> = contents
         .split('\n')
         .filter_map(|string| string.parse().ok())
-        .map(|address| (address, address >> 8usize & 0xFF, address & 0xFF))
+        .map(|address| (address, (address >> 8usize) & 0xFF, address & 0xFF))
         .collect();
 
-    let page_numbers: Vec<usize> = page_numbers_zipped
-        .iter()
-        .map(|(_, pn, _)| *pn as usize)
-        .collect();
+    let page_numbers: Vec<usize> = page_numbers_zipped.iter().map(|(_, pn, _)| *pn).collect();
 
     /**********RUNNING SIMULATOR**********/
     // Check the TLB, if in TLB move on, else look at Page Table
@@ -213,7 +207,10 @@ fn main() {
         let (logical_address, _page_number, offset) = page_numbers_zipped[i];
 
         // Fetch page from backing store at page_number * PAGE_SIZE, print hex
-        if let Ok(_) = backing_store.seek(SeekFrom::Start((page_number * args.page_size) as u64)) {
+        if backing_store
+            .seek(SeekFrom::Start((page_number * args.page_size) as u64))
+            .is_ok()
+        {
             let mut page = vec![0u8; args.page_size];
 
             if let Ok(()) = backing_store.read_exact(&mut page) {
@@ -235,8 +232,8 @@ fn main() {
 
 /* HELPER FUNCTIONS */
 fn eject(
-    ram_frames: &mut Vec<PageTableEntry>,
-    all_pns: &Vec<usize>,
+    ram_frames: &mut [PageTableEntry],  // Pass a slice instead of a vector
+    all_pns: &[usize],
     present_idx: usize,
     replace_idx: usize,
 ) -> usize {

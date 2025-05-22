@@ -1,11 +1,11 @@
 use linked_hash_set::LinkedHashSet;
 
-pub struct TLB {
+pub struct Tlb {
     entries: LinkedHashSet<usize>,
     max_size: usize,
 }
 
-impl TLB {
+impl Tlb {
     pub fn new(size: usize) -> Self {
         Self {
             entries: LinkedHashSet::new(),
