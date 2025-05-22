@@ -1,18 +1,13 @@
-/**
-FAILING:
-cargo run -- tests/fifo5.txt 8 FIFO -d -t 5A
-
-
- */
 use clap::Parser;
 use std::{
-    collections::{HashSet, VecDeque},
     fs,
     io::{Read, Seek, SeekFrom},
     usize,
 };
 mod cli;
 use cli::{Cli, PageReplacementAlgorithm};
+mod tlb;
+use tlb::TLB;
 
 struct PageTableEntry {
     insertion_time: usize,
@@ -143,70 +138,6 @@ fn fifo(
     )
 }
 
-fn eject(
-    ram_frames: &mut Vec<PageTableEntry>,
-    all_pns: &Vec<usize>,
-    present_idx: usize,
-    replace_idx: usize,
-) -> usize {
-    let ejected_pn = ram_frames[replace_idx].pn;
-    ram_frames[replace_idx] = PageTableEntry {
-        insertion_time: present_idx,
-        pn: all_pns[present_idx],
-    };
-    ejected_pn
-}
-
-struct TLB {
-    _tlb_set: HashSet<usize>,
-    _tlb_queue: VecDeque<usize>,
-    _max_size: usize,
-}
-
-impl TLB {
-    fn new(size: usize) -> Self {
-        Self {
-            _tlb_set: HashSet::new(),
-            _tlb_queue: VecDeque::with_capacity(size),
-            _max_size: size,
-        }
-    }
-
-    fn _remove_last_if_full(&mut self) {
-        if self._tlb_queue.len() == self._tlb_queue.capacity() {
-            if let Some(ejected_pn) = self._tlb_queue.pop_back() {
-                self._tlb_set.remove(&ejected_pn);
-            }
-        }
-    }
-
-    fn push(&mut self, pn: usize) {
-        self._remove_last_if_full();
-        self._tlb_set.insert(pn);
-        self._tlb_queue.push_front(pn);
-    }
-
-    fn remove(&mut self, pn: usize) {
-        let mut idx_to_remove: Option<usize> = None;
-
-        for (i, old_pn) in self._tlb_queue.iter().enumerate() {
-            if *old_pn == pn {
-                idx_to_remove = Some(i);
-                break;
-            }
-        }
-
-        if let Some(idx) = idx_to_remove {
-            self._tlb_queue.remove(idx);
-            self._tlb_set.remove(&pn);
-        }
-    }
-
-    fn contains(&self, pn: usize) -> bool {
-        self._tlb_set.contains(&pn)
-    }
-}
-
 fn main() {
     /**********STRUCTURE DECLARATION**********/
     let args = Cli::parse();
@@ -218,11 +149,12 @@ fn main() {
     let mut page_faults = 0;
 
     let mut backing_store =
-        fs::File::open("BACKING_STORE.bin").expect("Not able to read backing_store!");
+        fs::File::open("BACKING_STORE.bin").expect("Unable to read BACKING_STORE.bin!");
 
     /**********FILE PARSING**********/
     // Get all the the page numbers fromt the file
-    let contents = fs::read_to_string(args.file).expect("Not able to read file!");
+    let contents = fs::read_to_string(&args.file)
+        .expect(format!("Unable to read file: {}", args.file.display()).as_str());
 
     // Structured as logical address, page number, offset
     let page_numbers_zipped: Vec<(usize, usize, usize)> = contents
@@ -298,15 +230,33 @@ fn main() {
         }
     }
 
-    // Print statistics from TLB and RAM Operations
-    let addresses = page_numbers.len();
+    print_statistics(tlb_misses, page_faults, page_numbers.len(), args.debug);
+}
+
+/* HELPER FUNCTIONS */
+fn eject(
+    ram_frames: &mut Vec<PageTableEntry>,
+    all_pns: &Vec<usize>,
+    present_idx: usize,
+    replace_idx: usize,
+) -> usize {
+    let ejected_pn = ram_frames[replace_idx].pn;
+    ram_frames[replace_idx] = PageTableEntry {
+        insertion_time: present_idx,
+        pn: all_pns[present_idx],
+    };
+    ejected_pn
+}
+
+fn print_statistics(tlb_misses: usize, page_faults: usize, addresses: usize, debug: bool) {
+    /* Prints statistics from TLB and RAM Operations */
     let hits = addresses - tlb_misses;
-    if args.debug {
+    if debug {
         println!("***********************************");
     }
     println!("Number of Translated Addresses = {}", addresses);
     println!("Page Faults = {}", page_faults);
-    if !args.debug {
+    if !debug {
         println!(
             "Page Fault Rate = {:.3}",
             page_faults as f64 / addresses as f64,
@@ -314,7 +264,7 @@ fn main() {
     }
     println!("TLB Hits = {}", hits);
     println!("TLB Misses = {}", tlb_misses);
-    if !args.debug {
+    if !debug {
         println!("TLB Hit Rate = {:.3}", hits as f64 / addresses as f64,);
     }
 }

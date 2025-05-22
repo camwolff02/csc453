@@ -29,7 +29,7 @@ pub enum PageReplacementAlgorithm {
     OPT,
 }
 
-// Boilerplate to allow for strict all caps CLI matching
+// Below is boilerplate to allow for strict all caps CLI matching
 impl fmt::Display for PageReplacementAlgorithm {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
