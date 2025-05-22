@@ -16,8 +16,8 @@ struct PageTableEntry {
 impl PageReplacementAlgorithm {
     fn algorithm(
         &self,
-        ram_frames: &mut Vec<PageTableEntry>,
-        all_pns: &Vec<usize>,
+        ram_frames: &mut [PageTableEntry],
+        all_pns: &[usize],
         present_idx: usize,
     ) -> (usize, usize) {
         match self {
@@ -29,8 +29,8 @@ impl PageReplacementAlgorithm {
 }
 
 fn opt(
-    ram_frames: &mut Vec<PageTableEntry>,
-    all_pns: &Vec<usize>,
+    ram_frames: &mut [PageTableEntry],
+    all_pns: &[usize],
     present_idx: usize,
 ) -> (usize, usize) {
     let mut longest_dist: usize = 0;
@@ -76,8 +76,8 @@ fn opt(
 }
 
 fn lru(
-    ram_frames: &mut Vec<PageTableEntry>,
-    all_pns: &Vec<usize>,
+    ram_frames: &mut [PageTableEntry],
+    all_pns: &[usize],
     present_idx: usize,
 ) -> (usize, usize) {
     let mut longest_dist: usize = 0;
@@ -113,8 +113,8 @@ fn lru(
 }
 
 fn fifo(
-    ram_frames: &mut Vec<PageTableEntry>,
-    all_pns: &Vec<usize>,
+    ram_frames: &mut [PageTableEntry],
+    all_pns: &[usize],
     present_idx: usize,
 ) -> (usize, usize) {
     let mut oldest_time = usize::MAX;
