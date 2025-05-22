@@ -11,6 +11,15 @@ pub struct Cli {
 
     #[arg(default_value_t=PageReplacementAlgorithm::FIFO)]
     pub pra: PageReplacementAlgorithm,
+
+    #[arg(short, long, default_value_t=16)]
+    pub tlb_entries: usize,
+
+    #[arg(short, long, default_value_t=256)]
+    pub page_size: usize,
+
+    #[arg(short, long)]
+    pub debug: bool
 }
 
 #[derive(Debug, Clone)]
@@ -20,6 +29,7 @@ pub enum PageReplacementAlgorithm {
     OPT,
 }
 
+// Boilerplate to allow for strict all caps CLI matching
 impl fmt::Display for PageReplacementAlgorithm {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
