@@ -1,25 +1,25 @@
-use std::{fmt, path::PathBuf};
 use clap::{builder::PossibleValue, Parser, ValueEnum};
+use std::{fmt, path::PathBuf};
 
 #[derive(Parser, Debug)]
 #[command(name = "memSim")]
 pub struct Cli {
     pub file: PathBuf,
 
-    #[arg(default_value_t=256)]
+    #[arg(default_value_t = 256)]
     pub frames: usize,
 
     #[arg(default_value_t=PageReplacementAlgorithm::Fifo)]
     pub pra: PageReplacementAlgorithm,
 
-    #[arg(short, long, default_value_t=16)]
+    #[arg(short, long, default_value_t = 16)]
     pub tlb_entries: usize,
 
-    #[arg(short, long, default_value_t=256)]
+    #[arg(short, long, default_value_t = 256)]
     pub page_size: usize,
 
     #[arg(short, long)]
-    pub debug: bool
+    pub debug: bool,
 }
 
 #[derive(Debug, Clone)]

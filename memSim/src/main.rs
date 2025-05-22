@@ -232,7 +232,7 @@ fn main() {
 
 /* HELPER FUNCTIONS */
 fn eject(
-    ram_frames: &mut [PageTableEntry],  // Pass a slice instead of a vector
+    ram_frames: &mut [PageTableEntry], // Pass a slice instead of a vector
     all_pns: &[usize],
     present_idx: usize,
     replace_idx: usize,
