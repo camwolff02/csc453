@@ -6,6 +6,7 @@ clean:
 	cargo clean
 	rm -f memSim
 	rm -f out
+	rm -f submission.tgz
 tar:
 	tar -zcvf submission.tgz src/* Cargo.lock Cargo.toml README Makefile
 
