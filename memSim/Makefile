@@ -6,6 +6,8 @@ clean:
 	cargo clean
 	rm -f memSim
 	rm -f out
+tar:
+	tar -zcvf submission.tgz src/* Cargo.lock Cargo.toml README Makefile
 
 test_out: 
 	cargo run -- tests/example_input.txt > out && diff out tests/example_output.txt
@@ -39,3 +41,4 @@ test9:
 
 test10:
 	cargo run -- tests/opt2.txt -d 5 OPT
+

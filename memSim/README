@@ -1,0 +1,4 @@
+Cameron Wolff
+Compile on computer with Cargo installed. Use `make` to build, then `./memSim` to run. Use `./memSim --help` for a list of all command line arguments. 
+Currently passing all given test cases.
+
